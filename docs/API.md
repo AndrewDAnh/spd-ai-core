@@ -191,7 +191,7 @@ Check API health status.
 
 ### STAR Regression Model
 
-The inference API uses the STAR (Spatio-Temporal Attention for RUL) model:
+The inference API uses the STAR (transformer-based) model:
 
 - **Architecture**: Multi-scale transformer with two-stage attention (temporal + sensor)
 - **Input**: 128 time steps × 14 sensors
