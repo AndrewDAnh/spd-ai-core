@@ -1,0 +1,87 @@
+{
+  "validation_id": "val_20250125_001",
+  "engines": [
+    {
+      "engine_id": "ENG-001",
+      "data": [
+        {
+          "sensor_1": 525.20,
+          "sensor_2": 650.50,
+          "sensor_3": 1600.00,
+          "sensor_4": 1410.00,
+          "sensor_5": 15.50,
+          "sensor_6": 22.50,
+          "sensor_7": 558.00,
+          "sensor_8": 2395.00,
+          "sensor_9": 9055.00,
+          "sensor_10": 1.35,
+          "sensor_11": 48.50,
+          "sensor_12": 525.00,
+          "sensor_13": 2395.00,
+          "sensor_14": 8145.00,
+          "sensor_15": 8.4500,
+          "sensor_16": 0.03,
+          "sensor_17": 395,
+          "sensor_18": 2395,
+          "sensor_19": 100.0,
+          "sensor_20": 40.00
+        },
+        {
+          "sensor_1": 525.30,
+          "sensor_2": 650.60,
+          "sensor_3": 1600.10,
+          "sensor_4": 1410.10,
+          "sensor_5": 15.51,
+          "sensor_6": 22.51,
+          "sensor_7": 558.10,
+          "sensor_8": 2395.10,
+          "sensor_9": 9055.10,
+          "sensor_10": 1.35,
+          "sensor_11": 48.51,
+          "sensor_12": 525.10,
+          "sensor_13": 2395.10,
+          "sensor_14": 8145.10,
+          "sensor_15": 8.4501,
+          "sensor_16": 0.03,
+          "sensor_17": 395,
+          "sensor_18": 2395,
+          "sensor_19": 100.0,
+          "sensor_20": 40.01
+        }
+      ]
+    },
+    {
+      "engine_id": "ENG-002",
+      "data": [
+        {
+          "sensor_1": 520.00,
+          "sensor_2": 644.00,
+          "sensor_3": 1594.00,
+          "sensor_4": 1404.00,
+          "sensor_5": 14.90,
+          "sensor_6": 21.95,
+          "sensor_7": 555.50,
+          "sensor_8": 2389.50,
+          "sensor_9": 9049.50,
+          "sensor_10": 1.32,
+          "sensor_11": 47.95,
+          "sensor_12": 522.50,
+          "sensor_13": 2389.50,
+          "sensor_14": 8141.50,
+          "sensor_15": 8.4300,
+          "sensor_16": 0.03,
+          "sensor_17": 393,
+          "sensor_18": 2389,
+          "sensor_19": 100.0,
+          "sensor_20": 39.50
+        }
+      ]
+    }
+  ],
+  "use_stored_reference": true,
+  "config": {
+    "drift_threshold": 0.2,
+    "outlier_sensitivity": "medium"
+  }
+}
+
