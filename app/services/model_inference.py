@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.core.logging_config import logger
 from app.models.schemas import CmapssDataPoint
 from app.services.star_model import STARPredictionEngine
+from app.services.bilstm_model import BiLSTMPredictionEngine
 
 
 class ModelInferenceService:
@@ -13,7 +14,7 @@ class ModelInferenceService:
     def __init__(self):
         self.settings = get_settings()
         self.regression_model: Optional[STARPredictionEngine] = None
-        self.classification_model = None  # Placeholder for future classifier
+        self.classification_model: Optional[BiLSTMPredictionEngine] = None
         self._load_models()
     
     def _load_models(self):
@@ -25,15 +26,18 @@ class ModelInferenceService:
                 device=self.settings.DEVICE,
                 smoothing_window=5
             )
+            logger.info("Loading BiLSTM regression model...")
+            self.classification_model = BiLSTMPredictionEngine(
+                run_dir=self.settings.CLASSIFICATION_MODEL_PATH,
+                device=self.settings.DEVICE,
+                smoothing_window=5
+            )
             logger.info("STAR regression model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load regression model: {str(e)}")
             logger.warning("Model inference will not be available")
             raise
-        
-        # Classification model placeholder
-        logger.info("Classification model not available - will return None for is_going_to_fail")
-    
+  
     def predict(
         self,
         engine_id: str,
@@ -55,14 +59,14 @@ class ModelInferenceService:
             if self.regression_model is None:
                 raise RuntimeError("Regression model not loaded")
             
+            if self.classification_model is None:
+                raise RuntimeError("Classification model not loaded")
+            
             # Get RUL prediction from STAR model
             rul = self.regression_model.predict_from_api_data(engine_id, data)
             
             # Classification placeholder - return None when classifier unavailable
-            is_going_to_fail = None
-            
-            # TODO: When classifier is available:
-            # is_going_to_fail = self.classification_model.predict(...)
+            is_going_to_fail = self.classification_model.predict_from_api_data(engine_id, data)
             
             # Calculate confidence based on RUL value
             confidence = self._calculate_confidence(rul)
