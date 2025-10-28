@@ -356,3 +356,46 @@ def build_inference_windows(
         windows.append(window)
         unit_ids.append(unit)
     return np.stack(windows), np.array(unit_ids)
+
+def build_last_window(
+    df: pd.DataFrame,
+    sensors: Sequence[str],
+    seq_len: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Generate the last window per unit from a CMAPSS-style dataframe.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe with columns ['unit', 'cycle', ...sensor columns...]
+    sensors : Sequence[str]
+        List of sensor column names to use.
+    seq_len : int
+        Length of the window (number of cycles).
+
+    Returns
+    -------
+    windows : np.ndarray
+        Array shaped (num_units, seq_len, num_sensors).
+    unit_ids : np.ndarray
+        Engine identifiers aligned with ``windows``.
+    """
+    windows: List[np.ndarray] = []
+    unit_ids: List[int] = []
+    units = sorted(df["unit"].unique())
+    if not units:
+        raise ValueError("Input dataframe contains no engines")
+
+    for unit in units:
+        unit_df = df[df["unit"] == unit].sort_values("cycle")
+        values = unit_df[sensors].to_numpy(dtype=np.float32)
+        if len(values) >= seq_len:
+            window = values[-seq_len:]
+        else:
+            pad = np.repeat(values[:1], seq_len - len(values), axis=0)
+            window = np.concatenate([pad, values], axis=0)
+        windows.append(window)
+        unit_ids.append(unit)
+
+    return np.stack(windows), np.array(unit_ids)

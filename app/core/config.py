@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     
     # Model settings - STAR Regression Model
     REGRESSION_MODEL_PATH: str = "models/regression/fd001"
+    CLASSIFICATION_MODEL_PATH: str = "models/classification/fd001"
     DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
     FAILURE_THRESHOLD: int = 30  # RUL threshold for failure warning
     

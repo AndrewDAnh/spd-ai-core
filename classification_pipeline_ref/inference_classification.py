@@ -1,22 +1,12 @@
 """
-Inference Script for CNN-Transformer Fault Classification Model
+BiLSTM Binary Classification Inference Script
 
-This script automatically loads the latest trained model from runs/ directory
-and performs predictions on new CMAPSS data, outputting results in JSON format.
+Load trained BiLSTM model and run binary classification predictions on test data.
+Outputs predictions with probabilities to CSV file.
 
-Features:
-- 🤖 Auto-loads latest model from runs/ directory
-- 📊 Outputs comprehensive JSON predictions
-- 🔧 Automatic preprocessing with saved scaler
-- 📈 Includes confidence scores and engine-level summaries
-
-Usage:
-    # Auto-load latest model
-    python inference.py --input_file data/test_FD001.txt
-    
-    # Specify a specific run
-    python inference.py --input_file data/test_FD001.txt --run_dir runs/run_20251026_123456
-
+Based on BiLSTM_Classification.ipynb implementation.
+Paper: Kononov et al., "Prediction of Technical State of Mechanical Systems 
+       Based on Interpretive Neural Network Model", Sensors 2023, 23(4), 1892
 """
 
 import numpy as np
@@ -24,622 +14,481 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import json
-import argparse
-import pickle
 from pathlib import Path
-from datetime import datetime
-from tqdm.auto import tqdm
+import argparse
+import json
+import pickle
 import warnings
 warnings.filterwarnings('ignore')
 
 
 # ============================================================================
-# MODEL DEFINITION (Must match training architecture)
+# Model Architecture (same as notebook)
 # ============================================================================
 
-class CNNTransformerClassifier(nn.Module):
+class BiLSTMClassifierFixed(nn.Module):
     """
-    CNN-Transformer model for fault classification
-    
-    Architecture:
-        Input (batch, seq_len, features)
-        ↓
-        CNN Block 1: Conv1D(64) + ReLU + MaxPool + Dropout
-        ↓
-        CNN Block 2: Conv1D(128) + ReLU + MaxPool + Dropout
-        ↓
-        Projection: Linear to d_model (128)
-        ↓
-        Transformer Encoder: N layers with Multi-Head Attention
-        ↓
-        Global Average Pooling
-        ↓
-        Dense Block: FC(256) → FC(128) → FC(num_classes)
-        ↓
-        Output: Class probabilities
+    BiLSTM model for binary classification - FIXED LENGTH VERSION
+    Architecture from paper Table 1
     """
-    
-    def __init__(self, config, num_features, num_classes=2):
-        super(CNNTransformerClassifier, self).__init__()
+    def __init__(self, input_size, hidden_sizes=[64, 32], fc_sizes=[16, 8], dropout=0.2):
+        super(BiLSTMClassifierFixed, self).__init__()
         
-        cnn_cfg = config['model']['cnn']
-        trans_cfg = config['model']['transformer']
-        dense_cfg = config['model']['dense']
+        self.input_size = input_size
+        self.hidden_sizes = hidden_sizes
         
-        # === CNN Feature Extraction ===
-        self.conv1 = nn.Conv1d(
-            in_channels=num_features,
-            out_channels=cnn_cfg['conv1_filters'],
-            kernel_size=cnn_cfg['conv1_kernel_size'],
-            padding='same'
-        )
-        self.pool1 = nn.MaxPool1d(kernel_size=cnn_cfg['pool1_size'])
-        self.dropout1 = nn.Dropout(trans_cfg['dropout'])
-        
-        self.conv2 = nn.Conv1d(
-            in_channels=cnn_cfg['conv1_filters'],
-            out_channels=cnn_cfg['conv2_filters'],
-            kernel_size=cnn_cfg['conv2_kernel_size'],
-            padding='same'
-        )
-        self.pool2 = nn.MaxPool1d(kernel_size=cnn_cfg['pool2_size'])
-        self.dropout2 = nn.Dropout(trans_cfg['dropout'])
-        
-        self.projection = nn.Linear(cnn_cfg['conv2_filters'], trans_cfg['d_model'])
-        
-        # === Transformer Encoder ===
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=trans_cfg['d_model'],
-            nhead=trans_cfg['num_heads'],
-            dim_feedforward=trans_cfg['d_ff'],
-            dropout=trans_cfg['dropout'],
-            activation='relu',
-            batch_first=True
-        )
-        self.transformer = nn.TransformerEncoder(
-            encoder_layer,
-            num_layers=trans_cfg['num_layers']
+        # BiLSTM Layer 1: input_size -> 64 (bidirectional -> 128)
+        self.bilstm1 = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_sizes[0],
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
         )
         
-        # === Classification Head ===
-        self.fc1 = nn.Linear(trans_cfg['d_model'], dense_cfg['units'][0])
-        self.dropout3 = nn.Dropout(trans_cfg['dropout'])
+        # BiLSTM Layer 2: 128 -> 32 (bidirectional -> 64)
+        self.bilstm2 = nn.LSTM(
+            input_size=hidden_sizes[0] * 2,
+            hidden_size=hidden_sizes[1],
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
+        )
         
-        self.fc2 = nn.Linear(dense_cfg['units'][0], dense_cfg['units'][1])
-        self.dropout4 = nn.Dropout(trans_cfg['dropout'])
+        # FC Layer 1: 64 -> 16
+        self.fc1 = nn.Linear(hidden_sizes[1] * 2, fc_sizes[0])
+        self.dropout1 = nn.Dropout(dropout)
         
-        self.fc3 = nn.Linear(dense_cfg['units'][1], num_classes)
+        # FC Layer 2: 16 -> 8
+        self.fc2 = nn.Linear(fc_sizes[0], fc_sizes[1])
+        self.dropout2 = nn.Dropout(dropout)
+        
+        # Output Layer: 8 -> 1
+        self.fc_out = nn.Linear(fc_sizes[1], 1)
         
     def forward(self, x):
-        # CNN expects (batch, features, seq_len)
-        x = x.transpose(1, 2)
+        """
+        Forward pass for FIXED-LENGTH sequences
         
-        # CNN Block 1
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
+        Args:
+            x: Input tensor (batch, seq_len, num_sensors)
+        
+        Returns:
+            output: Binary classification logits (batch, 1)
+        """
+        # BiLSTM Layer 1
+        output, (h1, c1) = self.bilstm1(x)
+        
+        # BiLSTM Layer 2
+        output, (h2, c2) = self.bilstm2(output)
+        
+        # Get last output (many-to-one)
+        last_output = output[:, -1, :]  # (batch, hidden*2)
+        
+        # FC Layer 1 + ReLU + Dropout
+        x = self.fc1(last_output)
+        x = F.relu(x)
         x = self.dropout1(x)
         
-        # CNN Block 2
-        x = F.relu(self.conv2(x))
-        x = self.pool2(x)
+        # FC Layer 2 + ReLU + Dropout
+        x = self.fc2(x)
+        x = F.relu(x)
         x = self.dropout2(x)
         
-        # Back to (batch, seq_len, features) for Transformer
-        x = x.transpose(1, 2)
+        # Output Layer
+        output = self.fc_out(x)  # (batch, 1)
         
-        # Project to d_model
-        x = self.projection(x)
-        
-        # Transformer Encoder
-        x = self.transformer(x)
-        
-        # Global Average Pooling
-        x = torch.mean(x, dim=1)
-        
-        # Dense Classification Head
-        x = F.relu(self.fc1(x))
-        x = self.dropout3(x)
-        
-        x = F.relu(self.fc2(x))
-        x = self.dropout4(x)
-        
-        x = self.fc3(x)
-        
-        return x
+        return output
 
 
 # ============================================================================
-# UTILITY FUNCTIONS
+# Data Loading & Preprocessing
 # ============================================================================
 
-def find_latest_run(runs_dir='runs'):
+def load_cmapss_data(filepath):
+    """Load C-MAPSS dataset"""
+    columns = ['unit', 'cycle', 'setting_1', 'setting_2', 'setting_3'] + \
+              [f's{i}' for i in range(1, 22)]
+    df = pd.read_csv(filepath, sep='\s+', header=None, names=columns)
+    return df
+
+
+def normalize_sensors(df, stats, sensor_cols):
+    """Apply min-max normalization using training statistics"""
+    df = df.copy()
+    for col in sensor_cols:
+        min_val = stats[col]['min']
+        max_val = stats[col]['max']
+        range_val = max_val - min_val
+        if range_val > 1e-6:
+            df[col] = (df[col] - min_val) / range_val
+        else:
+            df[col] = 0.0
+    return df
+
+
+def create_sliding_windows(df, sensor_cols, window_size, step=1):
     """
-    Find the most recent run directory
+    Create sliding windows for inference
     
     Args:
-        runs_dir: Base directory containing run folders
-        
+        df: DataFrame with sensor data
+        sensor_cols: List of sensor column names
+        window_size: Size of sliding window (21 from paper)
+        step: Step size for sliding window
+    
     Returns:
-        Path to latest run directory
+        windows: Array of sequences (num_windows, window_size, num_sensors)
+        window_info: DataFrame with window metadata
     """
-    runs_path = Path(runs_dir)
-    if not runs_path.exists():
-        raise FileNotFoundError(f"Runs directory not found: {runs_dir}")
+    windows = []
+    window_info = []
     
-    run_folders = sorted([d for d in runs_path.iterdir() if d.is_dir() and d.name.startswith('run_')])
-    
-    if not run_folders:
-        raise FileNotFoundError(f"No run folders found in {runs_dir}")
-    
-    latest_run = run_folders[-1]  # Most recent by timestamp
-    return latest_run
-
-
-def load_run_info(run_dir):
-    """
-    Load run information from run directory
-    
-    Args:
-        run_dir: Path to run directory
+    for unit_id in sorted(df['unit'].unique()):
+        unit_data = df[df['unit'] == unit_id].sort_values('cycle')
+        sensor_values = unit_data[sensor_cols].values
+        total_cycles = len(unit_data)
         
-    Returns:
-        Dictionary with run info
-    """
-    run_info_path = Path(run_dir) / 'run_info.json'
-    training_summary_path = Path(run_dir) / 'results' / 'training_summary.json'
-    
-    info = {}
-    if run_info_path.exists():
-        with open(run_info_path, 'r') as f:
-            info.update(json.load(f))
-    
-    if training_summary_path.exists():
-        with open(training_summary_path, 'r') as f:
-            info['training_summary'] = json.load(f)
-    
-    return info
-
-
-# ============================================================================
-# INFERENCE CLASS
-# ============================================================================
-
-class FaultClassifierInference:
-    """
-    Inference pipeline for CMAPSS fault classification
-    Automatically loads latest model from runs/ directory
-    """
-    
-    def __init__(self, 
-                 run_dir=None,
-                 device=None):
-        """
-        Initialize inference pipeline
-        
-        Args:
-            run_dir: Path to specific run directory. If None, uses latest from runs/
-            device: 'cuda', 'cpu', or None (auto-detect)
-        """
-        print("="*80)
-        print("🚀 INITIALIZING FAULT CLASSIFIER INFERENCE PIPELINE")
-        print("="*80)
-        
-        # Find run directory
-        if run_dir is None:
-            print("\n📂 Auto-detecting latest model...")
-            run_dir = find_latest_run()
-        else:
-            run_dir = Path(run_dir)
-        
-        if not run_dir.exists():
-            raise FileNotFoundError(f"Run directory not found: {run_dir}")
-        
-        self.run_dir = run_dir
-        print(f"   ✅ Using run: {run_dir.name}")
-        
-        # Load run info
-        self.run_info = load_run_info(run_dir)
-        if 'training_summary' in self.run_info:
-            ts = self.run_info['training_summary']
-            print(f"   📊 Training: Epoch {ts['best_epoch']}, Val Acc: {ts['best_metrics']['val_acc']*100:.2f}%")
-        
-        # Set paths
-        self.config_path = run_dir / 'config.json'
-        self.model_path = run_dir / 'models' / 'best_model.pth'
-        self.scaler_path = run_dir / 'models' / 'scaler.pkl'
-        
-        # Verify files exist
-        for name, path in [('Config', self.config_path), 
-                           ('Model', self.model_path), 
-                           ('Scaler', self.scaler_path)]:
-            if not path.exists():
-                raise FileNotFoundError(f"{name} not found: {path}")
-        
-        # Device configuration
-        if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(device)
-        
-        print(f"\n📱 Device: {self.device}")
-        if torch.cuda.is_available():
-            print(f"   GPU: {torch.cuda.get_device_name(0)}")
-        
-        # Load configuration
-        print(f"\n📂 Loading configuration from: {self.config_path.name}")
-        with open(self.config_path, 'r') as f:
-            self.config = json.load(f)
-        print("   ✅ Config loaded")
-        
-        # Extract key parameters
-        self.window_size = self.config['preprocessing']['window_size']
-        self.rul_threshold = self.config['dataset']['rul_threshold']
-        
-        # Define column names
-        self.column_names = ['unit', 'time'] + \
-                           [f'op_setting_{i}' for i in range(1, 4)] + \
-                           [f'sensor_{i}' for i in range(1, 22)]
-        
-        # Define feature columns
-        op_settings = ['op_setting_1', 'op_setting_2', 'op_setting_3']
-        if 'selected_sensors' in self.config['dataset'] and self.config['dataset']['selected_sensors']:
-            selected_sensors = [f'sensor_{i}' for i in self.config['dataset']['selected_sensors']]
-        else:
-            # Default: remove constant sensors
-            selected_sensors = [f'sensor_{i}' for i in [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]]
-        
-        self.feature_cols = op_settings + selected_sensors
-        self.num_features = len(self.feature_cols)
-        
-        print(f"\n🔧 Configuration:")
-        print(f"   Window size: {self.window_size} cycles")
-        print(f"   RUL threshold: {self.rul_threshold} cycles")
-        print(f"   Features: {self.num_features} ({len(op_settings)} op_settings + {len(selected_sensors)} sensors)")
-        
-        # Load scaler
-        print(f"\n📊 Loading scaler from: {self.scaler_path.name}")
-        with open(self.scaler_path, 'rb') as f:
-            self.scaler = pickle.load(f)
-        print("   ✅ Scaler loaded")
-        
-        # Load model
-        print(f"\n🧠 Loading model from: {self.model_path.name}")
-        self.model = CNNTransformerClassifier(
-            self.config, 
-            self.num_features, 
-            num_classes=2
-        ).to(self.device)
-        
-        checkpoint = torch.load(self.model_path, map_location=self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.eval()
-        
-        print("   ✅ Model loaded and set to evaluation mode")
-        print(f"   📈 Model was trained until epoch {checkpoint['epoch']+1}")
-        print(f"   📊 Best validation accuracy: {checkpoint['val_acc']*100:.2f}%")
-        
-        # Count parameters
-        total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"   🔢 Total parameters: {total_params:,}")
-        
-        print("\n" + "="*80)
-        print("✅ INFERENCE PIPELINE READY")
-        print("="*80 + "\n")
-    
-    def load_data(self, input_file):
-        """
-        Load data from input file (same format as CMAPSS test data)
-        
-        Args:
-            input_file: Path to input data file
-        
-        Returns:
-            DataFrame with loaded data
-        """
-        print(f"📂 Loading data from: {input_file}")
-        
-        # Read data
-        df = pd.read_csv(input_file, sep='\s+', header=None, names=self.column_names)
-        
-        print(f"   ✅ Loaded {df.shape[0]} rows from {df['unit'].nunique()} engines")
-        print(f"   📊 Columns: {df.shape[1]}")
-        print(f"   🔢 Engine IDs: {df['unit'].min()} to {df['unit'].max()}")
-        
-        return df
-    
-    def preprocess_data(self, df):
-        """
-        Preprocess data: normalize features and create sliding windows
-        
-        Args:
-            df: Input DataFrame
-        
-        Returns:
-            X: numpy array of windows (num_samples, window_size, num_features)
-            window_info: DataFrame with metadata about each window
-        """
-        print("\n🔄 Preprocessing data...")
-        
-        # Create a copy
-        df_norm = df.copy()
-        
-        # Normalize features using fitted scaler
-        print("   Normalizing features...")
-        df_norm[self.feature_cols] = self.scaler.transform(df[self.feature_cols])
-        
-        # Create sliding windows
-        print(f"   Creating sliding windows (size={self.window_size})...")
-        X = []
-        window_info = []
-        
-        for unit_id in tqdm(df_norm['unit'].unique(), desc='   Processing engines'):
-            unit_data = df_norm[df_norm['unit'] == unit_id].sort_values('time').reset_index(drop=True)
+        if total_cycles < window_size:
+            # Pad short sequences
+            pad_length = window_size - total_cycles
+            pad = np.repeat(sensor_values[:1], pad_length, axis=0)
+            window = np.concatenate([pad, sensor_values], axis=0)
             
-            features = unit_data[self.feature_cols].values
-            
-            # Sliding window with step=1
-            for i in range(len(features) - self.window_size + 1):
-                X.append(features[i:i+self.window_size])
+            windows.append(window)
+            window_info.append({
+                'unit_id': unit_id,
+                'window_idx': 0,
+                'start_cycle': 1,
+                'end_cycle': total_cycles,
+                'total_cycles': total_cycles,
+                'is_padded': True
+            })
+        else:
+            # Create sliding windows
+            for start_idx in range(0, total_cycles - window_size + 1, step):
+                end_idx = start_idx + window_size
+                window = sensor_values[start_idx:end_idx]
                 
-                # Store metadata
+                windows.append(window)
                 window_info.append({
-                    'unit': unit_id,
-                    'window_id': i,
-                    'start_cycle': int(unit_data.iloc[i]['time']),
-                    'end_cycle': int(unit_data.iloc[i+self.window_size-1]['time']),
-                    'last_cycle': int(unit_data.iloc[i+self.window_size-1]['time'])
+                    'unit_id': unit_id,
+                    'window_idx': start_idx // step,
+                    'start_cycle': start_idx + 1,
+                    'end_cycle': end_idx,
+                    'total_cycles': total_cycles,
+                    'is_padded': False
                 })
-        
-        X = np.array(X)
-        window_info_df = pd.DataFrame(window_info)
-        
-        print(f"   ✅ Created {X.shape[0]} windows")
-        print(f"   📊 Shape: {X.shape} (samples, timesteps, features)")
-        
-        return X, window_info_df
     
-    def predict(self, X, batch_size=64):
-        """
-        Perform inference on preprocessed windows
-        
-        Args:
-            X: numpy array of windows
-            batch_size: Batch size for inference
-        
-        Returns:
-            predictions: numpy array of predicted classes (0 or 1)
-            probabilities: numpy array of class probabilities (num_samples, 2)
-            confidence: numpy array of prediction confidence (max probability)
-        """
-        print("\n🔮 Performing predictions...")
-        
-        # Convert to tensor
-        X_tensor = torch.FloatTensor(X)
-        
-        # Create DataLoader
-        from torch.utils.data import TensorDataset, DataLoader
-        dataset = TensorDataset(X_tensor)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        
-        # Inference
-        all_preds = []
-        all_probs = []
-        
-        with torch.no_grad():
-            for (batch_x,) in tqdm(loader, desc='   Predicting'):
-                batch_x = batch_x.to(self.device)
-                
-                # Forward pass
-                outputs = self.model(batch_x)
-                probs = F.softmax(outputs, dim=1)
-                _, predicted = torch.max(outputs, 1)
-                
-                all_preds.extend(predicted.cpu().numpy())
-                all_probs.extend(probs.cpu().numpy())
-        
-        predictions = np.array(all_preds)
-        probabilities = np.array(all_probs)
-        confidence = np.max(probabilities, axis=1)
-        
-        print(f"   ✅ Predictions completed")
-        print(f"   📊 Results:")
-        print(f"      Normal (0):   {(predictions == 0).sum():6,} ({(predictions == 0).sum()/len(predictions)*100:5.2f}%)")
-        print(f"      Degraded (1): {(predictions == 1).sum():6,} ({(predictions == 1).sum()/len(predictions)*100:5.2f}%)")
-        print(f"   💪 Average confidence: {confidence.mean():.4f}")
-        
-        return predictions, probabilities, confidence
+    windows = np.array(windows, dtype=np.float32)
+    window_info_df = pd.DataFrame(window_info)
     
-    def predict_from_file(self, input_file, output_file=None, batch_size=64):
-        """
-        End-to-end prediction from input file
+    return windows, window_info_df
+
+
+def create_last_window_per_unit(df, sensor_cols, window_size):
+    """
+    Create only the last window per unit (most recent state)
+    Useful for final RUL prediction per engine
+    
+    Args:
+        df: DataFrame with sensor data
+        sensor_cols: List of sensor column names
+        window_size: Size of window (21 from paper)
+    
+    Returns:
+        windows: Array of sequences (num_units, window_size, num_sensors)
+        unit_info: DataFrame with unit metadata
+    """
+    windows = []
+    unit_info = []
+    
+    for unit_id in sorted(df['unit'].unique()):
+        unit_data = df[df['unit'] == unit_id].sort_values('cycle')
+        sensor_values = unit_data[sensor_cols].values
+        total_cycles = len(unit_data)
         
-        Args:
-            input_file: Path to input data file
-            output_file: Path to save predictions (optional)
-            batch_size: Batch size for inference
+        if total_cycles >= window_size:
+            window = sensor_values[-window_size:]
+        else:
+            # Pad with first reading
+            pad_length = window_size - total_cycles
+            pad = np.repeat(sensor_values[:1], pad_length, axis=0)
+            window = np.concatenate([pad, sensor_values], axis=0)
         
-        Returns:
-            results_df: DataFrame with predictions and metadata
-        """
-        print("\n" + "="*80)
-        print("🎯 STARTING PREDICTION PIPELINE")
-        print("="*80)
-        
-        # Load data
-        df = self.load_data(input_file)
-        
-        # Preprocess
-        X, window_info_df = self.preprocess_data(df)
-        
-        # Predict
-        predictions, probabilities, confidence = self.predict(X, batch_size)
-        
-        # Combine results
-        results_df = window_info_df.copy()
-        results_df['prediction'] = predictions
-        results_df['prediction_label'] = results_df['prediction'].map({
-            0: 'Normal',
-            1: 'Degraded'
+        windows.append(window)
+        unit_info.append({
+            'unit_id': unit_id,
+            'last_cycle': total_cycles,
+            'is_padded': total_cycles < window_size
         })
-        results_df['prob_normal'] = probabilities[:, 0]
-        results_df['prob_degraded'] = probabilities[:, 1]
-        results_df['confidence'] = confidence
-        
-        print("\n📊 PREDICTION SUMMARY")
-        print("="*80)
-        print(f"\nPer-Engine Results:")
-        
-        engine_summary = results_df.groupby('unit').agg({
-            'prediction': ['count', lambda x: (x == 0).sum(), lambda x: (x == 1).sum()],
-            'confidence': 'mean'
-        }).round(4)
-        engine_summary.columns = ['Total Windows', 'Normal Windows', 'Degraded Windows', 'Avg Confidence']
-        
-        for idx, row in engine_summary.iterrows():
-            degraded_pct = row['Degraded Windows'] / row['Total Windows'] * 100
-            status = "🟢 Healthy" if degraded_pct < 20 else "🟡 Warning" if degraded_pct < 50 else "🔴 Degraded"
-            print(f"\nEngine {idx:3d}: {status}")
-            print(f"  Windows: {int(row['Total Windows'])} total, {int(row['Normal Windows'])} normal, {int(row['Degraded Windows'])} degraded ({degraded_pct:.1f}%)")
-            print(f"  Avg confidence: {row['Avg Confidence']:.4f}")
-        
-        # Save results to JSON
-        if output_file:
-            # Prepare JSON output
-            output_data = {
-                'metadata': {
-                    'timestamp': pd.Timestamp.now().isoformat(),
-                    'input_file': input_file,
-                    'model_path': self.model_path,
-                    'config_path': self.config_path,
-                    'scaler_path': self.scaler_path,
-                    'window_size': int(self.window_size),
-                    'rul_threshold': int(self.rul_threshold),
-                    'num_features': int(self.num_features)
-                },
-                'summary': {
-                    'total_predictions': int(len(predictions)),
-                    'total_engines': int(results_df['unit'].nunique()),
-                    'normal_count': int((predictions == 0).sum()),
-                    'degraded_count': int((predictions == 1).sum()),
-                    'normal_percentage': float((predictions == 0).sum() / len(predictions) * 100),
-                    'degraded_percentage': float((predictions == 1).sum() / len(predictions) * 100),
-                    'average_confidence': float(confidence.mean()),
-                    'min_confidence': float(confidence.min()),
-                    'max_confidence': float(confidence.max())
-                },
-                'predictions': [],
-                'engine_summary': []
-            }
-            
-            # Add per-window predictions
-            for _, row in results_df.iterrows():
-                output_data['predictions'].append({
-                    'unit': int(row['unit']),
-                    'window_id': int(row['window_id']),
-                    'start_cycle': int(row['start_cycle']),
-                    'end_cycle': int(row['end_cycle']),
-                    'last_cycle': int(row['last_cycle']),
-                    'prediction': int(row['prediction']),
-                    'prediction_label': row['prediction_label'],
-                    'probabilities': {
-                        'normal': float(row['prob_normal']),
-                        'degraded': float(row['prob_degraded'])
-                    },
-                    'confidence': float(row['confidence'])
-                })
-            
-            # Add engine summary
-            for idx, row in engine_summary.iterrows():
-                unit_data = results_df[results_df['unit'] == idx]
-                latest_pred = unit_data.iloc[-1]
-                
-                output_data['engine_summary'].append({
-                    'unit': int(idx),
-                    'total_windows': int(row['Total Windows']),
-                    'normal_windows': int(row['Normal Windows']),
-                    'degraded_windows': int(row['Degraded Windows']),
-                    'degraded_percentage': float(row['Degraded Windows'] / row['Total Windows'] * 100),
-                    'avg_confidence': float(row['Avg Confidence']),
-                    'latest_prediction': {
-                        'cycle': int(latest_pred['last_cycle']),
-                        'label': latest_pred['prediction_label'],
-                        'probability_degraded': float(latest_pred['prob_degraded']),
-                        'confidence': float(latest_pred['confidence'])
-                    }
-                })
-            
-            # Save to JSON
-            with open(output_file, 'w') as f:
-                json.dump(output_data, f, indent=2)
-            print(f"\n💾 Predictions saved to: {output_file}")
-        
-        print("\n" + "="*80)
-        print("✅ PREDICTION PIPELINE COMPLETED")
-        print("="*80 + "\n")
-        
-        return results_df
+    
+    windows = np.array(windows, dtype=np.float32)
+    unit_info_df = pd.DataFrame(unit_info)
+    
+    return windows, unit_info_df
 
 
 # ============================================================================
-# MAIN FUNCTION
+# Inference
+# ============================================================================
+
+def run_inference(checkpoint_path, data_dir, test_file, output_path, 
+                  device='cuda', mode='last_window', threshold=None):
+    """
+    Run inference on test data
+    
+    Args:
+        checkpoint_path: Path to model checkpoint (.pt file)
+        data_dir: Directory containing normalization.json
+        test_file: Path to test data file
+        output_path: Path to save predictions CSV
+        device: 'cuda' or 'cpu'
+        mode: 'last_window' (one prediction per unit) or 'all_windows' (sliding window)
+        threshold: Classification threshold (default: from checkpoint or 0.5)
+    """
+    
+    print("=" * 80)
+    print("BiLSTM BINARY CLASSIFICATION INFERENCE")
+    print("=" * 80)
+    
+    # Load checkpoint
+    print(f"\nLoading checkpoint from: {checkpoint_path}")
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+    except Exception as e:
+        if isinstance(e, pickle.UnpicklingError) or 'Weights only load failed' in str(e):
+            print("Weights-only load failed. Retrying with weights_only=False.")
+            try:
+                checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+            except TypeError:
+                raise
+        else:
+            raise
+    
+    config = checkpoint.get('config', {})
+    
+    # Model configuration
+    WINDOW_SIZE = config.get('sliding_window', 21)
+    FORECAST_HORIZON = config.get('forecast_horizon', 30)
+    
+    # Determine optimal threshold
+    if threshold is None:
+        # Try to load from results.json if available
+        results_path = Path(data_dir) / 'results.json'
+        if results_path.exists():
+            with open(results_path, 'r') as f:
+                results = json.load(f)
+                threshold = results.get('threshold', {}).get('optimal_threshold', 0.5)
+                print(f"Loaded optimal threshold from results: {threshold:.4f}")
+        else:
+            threshold = 0.5
+            print(f"Using default threshold: {threshold}")
+    
+    print(f"\nModel configuration:")
+    print(f"  Forecast horizon: {FORECAST_HORIZON} cycles")
+    print(f"  Window size: {WINDOW_SIZE}")
+    print(f"  Classification threshold: {threshold:.4f}")
+    print(f"  Inference mode: {mode}")
+    
+    # Initialize model
+    print("\nInitializing model...")
+    SENSORS = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
+    SENSOR_COLS = [f's{i}' for i in SENSORS]
+    
+    model = BiLSTMClassifierFixed(
+        input_size=len(SENSOR_COLS),
+        hidden_sizes=[64, 32],
+        fc_sizes=[16, 8],
+        dropout=0.2
+    ).to(device)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"Model parameters: {num_params:,}")
+    print(f"Input features: {len(SENSOR_COLS)} sensors")
+    print(f"Loaded from epoch: {checkpoint.get('epoch', 'unknown')}")
+    if 'best_f1' in checkpoint:
+        print(f"Best validation F1: {checkpoint['best_f1']:.4f}")
+    
+    # Load normalization stats
+    norm_stats_path = Path(data_dir) / 'normalization.json'
+    print(f"\nLoading normalization stats from: {norm_stats_path}")
+    
+    if not norm_stats_path.exists():
+        raise FileNotFoundError(
+            f"Normalization stats not found: {norm_stats_path}\n"
+            f"Please ensure you have the normalization.json file from training."
+        )
+    
+    with open(norm_stats_path, 'r') as f:
+        norm_stats = json.load(f)
+    
+    # Load test data
+    print(f"\nLoading test data from: {test_file}")
+    test_df = load_cmapss_data(test_file)
+    print(f"Test data: {len(test_df):,} records, {test_df['unit'].nunique()} units")
+    
+    # Normalize
+    print("\nNormalizing test data...")
+    test_df = normalize_sensors(test_df, norm_stats, SENSOR_COLS)
+    
+    # Create windows based on mode
+    print(f"\nCreating windows (mode: {mode})...")
+    
+    if mode == 'last_window':
+        X_test, info_df = create_last_window_per_unit(test_df, SENSOR_COLS, WINDOW_SIZE)
+        print(f"Windows created: {len(X_test)} (one per unit)")
+    elif mode == 'all_windows':
+        X_test, info_df = create_sliding_windows(test_df, SENSOR_COLS, WINDOW_SIZE, step=1)
+        print(f"Windows created: {len(X_test):,} (sliding window)")
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Choose 'last_window' or 'all_windows'")
+    
+    print(f"Window shape: {X_test.shape}")
+    
+    # Run inference
+    print("\nRunning inference...")
+    predictions = []
+    probabilities = []
+    
+    batch_size = 256
+    with torch.no_grad():
+        for i in range(0, len(X_test), batch_size):
+            batch = X_test[i:i+batch_size]
+            x = torch.from_numpy(batch).to(device)
+            
+            # Get logits
+            logits = model(x).squeeze()
+            
+            # Convert to probabilities
+            probs = torch.sigmoid(logits)
+            
+            # Apply threshold
+            preds = (probs >= threshold).long()
+            
+            probabilities.extend(probs.cpu().numpy())
+            predictions.extend(preds.cpu().numpy())
+    
+    # Add predictions to info dataframe
+    info_df['probability'] = probabilities
+    info_df['predicted_class'] = predictions
+    info_df['prediction'] = info_df['predicted_class'].map({
+        0: 'Safe (>30 cycles)',
+        1: f'Failure Risk (≤{FORECAST_HORIZON} cycles)'
+    })
+    
+    # Summary statistics
+    print("\n" + "=" * 80)
+    print("INFERENCE COMPLETED")
+    print("=" * 80)
+    print(f"Total predictions: {len(info_df):,}")
+    
+    if mode == 'last_window':
+        print(f"\nPer-Unit Classification Results:")
+        print(f"  Units predicted as SAFE (Class 0): {(info_df['predicted_class']==0).sum()}")
+        print(f"  Units predicted as FAILURE RISK (Class 1): {(info_df['predicted_class']==1).sum()}")
+    else:
+        print(f"\nWindow Classification Results:")
+        print(f"  Windows predicted as SAFE (Class 0): {(info_df['predicted_class']==0).sum():,}")
+        print(f"  Windows predicted as FAILURE RISK (Class 1): {(info_df['predicted_class']==1).sum():,}")
+    
+    print(f"\nProbability Statistics:")
+    print(f"  Mean probability: {info_df['probability'].mean():.4f}")
+    print(f"  Std probability:  {info_df['probability'].std():.4f}")
+    print(f"  Min probability:  {info_df['probability'].min():.4f}")
+    print(f"  Max probability:  {info_df['probability'].max():.4f}")
+    
+    print("=" * 80)
+    
+    # Save predictions
+    print(f"\nSaving predictions to: {output_path}")
+    info_df.to_csv(output_path, index=False, float_format='%.6f')
+    
+    print(f"\nPredictions saved successfully!")
+    print(f"\nFirst 10 predictions:")
+    display_cols = ['unit_id', 'probability', 'predicted_class', 'prediction']
+    if mode == 'all_windows':
+        display_cols = ['unit_id', 'window_idx', 'end_cycle'] + display_cols[1:]
+    print(info_df[display_cols].head(10).to_string(index=False))
+    
+    # Additional analysis for last_window mode
+    if mode == 'last_window':
+        print("\n" + "=" * 80)
+        print("HIGH RISK UNITS (Predicted Failure within 30 cycles)")
+        print("=" * 80)
+        high_risk = info_df[info_df['predicted_class'] == 1].sort_values('probability', ascending=False)
+        if len(high_risk) > 0:
+            print(f"\nTotal high-risk units: {len(high_risk)}")
+            print("\nTop 10 highest risk units:")
+            print(high_risk[['unit_id', 'last_cycle', 'probability', 'prediction']].head(10).to_string(index=False))
+        else:
+            print("\nNo high-risk units detected.")
+    
+    return info_df
+
+
+# ============================================================================
+# Main
 # ============================================================================
 
 def main():
-    """
-    Main function for command-line usage
-    """
     parser = argparse.ArgumentParser(
-        description='CNN-Transformer Fault Classification Inference - Auto-loads latest model',
+        description='BiLSTM Binary Classification Inference - Predict engine failure risk',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Auto-load latest model and predict
-    python inference.py --input_file data/test_FD001.txt
-    
-    # Specify a specific run
-    python inference.py --input_file data/test_FD001.txt --run_dir runs/run_20251026_123456
-    
-    # Custom output file
-    python inference.py --input_file data/test_FD001.txt --output_file my_predictions.json
-    
-    # Use GPU
-    python inference.py --input_file data/test_FD001.txt --device cuda
+  # Predict on test set (one prediction per unit)
+  python bilstm_inference.py --test_file datasets/test_FD001.txt
+  
+  # Use all sliding windows for detailed analysis
+  python bilstm_inference.py --test_file datasets/test_FD001.txt --mode all_windows
+  
+  # Custom threshold
+  python bilstm_inference.py --test_file datasets/test_FD001.txt --threshold 0.45
+  
+  # CPU inference
+  python bilstm_inference.py --test_file datasets/test_FD001.txt --device cpu
         """
     )
     
-    parser.add_argument('--input_file', type=str, required=True,
-                       help='Path to input data file (same format as CMAPSS test data)')
-    parser.add_argument('--output_file', type=str, default=None,
-                       help='Path to save predictions (default: predictions_TIMESTAMP.json)')
-    parser.add_argument('--run_dir', type=str, default=None,
-                       help='Path to specific run directory (default: auto-detect latest from runs/)')
-    parser.add_argument('--device', type=str, default=None, choices=['cuda', 'cpu'],
-                       help='Device to use (default: auto-detect)')
-    parser.add_argument('--batch_size', type=int, default=64,
-                       help='Batch size for inference (default: 64)')
+    parser.add_argument('--checkpoint', type=str, default='runs/FD001/checkpoints/best_model_fixed.pt',
+                        help='Path to model checkpoint')
+    parser.add_argument('--test_file', type=str, required=True,
+                        help='Path to test data file (e.g., datasets/test_FD001.txt)')
+    parser.add_argument('--data_dir', type=str, default='runs/FD001',
+                        help='Directory containing normalization.json and results.json')
+    parser.add_argument('--output', type=str, default='predictions.csv',
+                        help='Output CSV file path')
+    parser.add_argument('--device', type=str, default='cuda',
+                        help='Device to run inference on (cuda or cpu)')
+    parser.add_argument('--mode', type=str, default='last_window',
+                        choices=['last_window', 'all_windows'],
+                        help='Inference mode: last_window (one per unit) or all_windows (sliding)')
+    parser.add_argument('--threshold', type=float, default=None,
+                        help='Classification threshold (default: from results.json or 0.5)')
     
     args = parser.parse_args()
     
-    # Default output file with timestamp
-    if args.output_file is None:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        args.output_file = f'predictions_{timestamp}.json'
+    # Auto-detect device
+    if args.device == 'cuda' and not torch.cuda.is_available():
+        print("CUDA not available, using CPU")
+        args.device = 'cpu'
     
-    # Initialize inference pipeline
-    inference = FaultClassifierInference(
-        run_dir=args.run_dir,
-        device=args.device
+    # Run inference
+    results = run_inference(
+        checkpoint_path=args.checkpoint,
+        data_dir=args.data_dir,
+        test_file=args.test_file,
+        output_path=args.output,
+        device=args.device,
+        mode=args.mode,
+        threshold=args.threshold
     )
     
-    # Run prediction
-    results_df = inference.predict_from_file(
-        input_file=args.input_file,
-        output_file=args.output_file,
-        batch_size=args.batch_size
-    )
-    
-    return results_df
+    return results
 
 
 if __name__ == '__main__':
