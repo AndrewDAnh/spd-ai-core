@@ -1,0 +1,84 @@
+{
+  "batch_id": "batch_20250125_001",
+  "engines": [
+    {
+      "engine_id": "ENG-001",
+      "timestamp": "2025-01-25T10:30:00Z",
+      "data": [
+        {
+          "sensor_1": 518.67,
+          "sensor_2": 641.82,
+          "sensor_3": 1589.70,
+          "sensor_4": 1400.60,
+          "sensor_5": 14.62,
+          "sensor_6": 21.61,
+          "sensor_7": 554.36,
+          "sensor_8": 2388.02,
+          "sensor_9": 9046.19,
+          "sensor_10": 1.30,
+          "sensor_11": 47.47,
+          "sensor_12": 521.66,
+          "sensor_13": 2388.02,
+          "sensor_14": 8138.62,
+          "sensor_15": 8.4195,
+          "sensor_16": 0.03,
+          "sensor_17": 392,
+          "sensor_18": 2388,
+          "sensor_19": 100.0,
+          "sensor_20": 39.06
+        },
+        {
+          "sensor_1": 518.70,
+          "sensor_2": 642.15,
+          "sensor_3": 1590.20,
+          "sensor_4": 1401.10,
+          "sensor_5": 14.65,
+          "sensor_6": 21.63,
+          "sensor_7": 554.50,
+          "sensor_8": 2388.50,
+          "sensor_9": 9047.00,
+          "sensor_10": 1.31,
+          "sensor_11": 47.50,
+          "sensor_12": 521.80,
+          "sensor_13": 2388.50,
+          "sensor_14": 8139.00,
+          "sensor_15": 8.4200,
+          "sensor_16": 0.03,
+          "sensor_17": 392,
+          "sensor_18": 2388,
+          "sensor_19": 100.0,
+          "sensor_20": 39.10
+        }
+      ]
+    },
+    {
+      "engine_id": "ENG-002",
+      "timestamp": "2025-01-25T10:30:00Z",
+      "data": [
+        {
+          "sensor_1": 520.50,
+          "sensor_2": 645.00,
+          "sensor_3": 1595.00,
+          "sensor_4": 1405.00,
+          "sensor_5": 15.00,
+          "sensor_6": 22.00,
+          "sensor_7": 556.00,
+          "sensor_8": 2390.00,
+          "sensor_9": 9050.00,
+          "sensor_10": 1.32,
+          "sensor_11": 48.00,
+          "sensor_12": 523.00,
+          "sensor_13": 2390.00,
+          "sensor_14": 8140.00,
+          "sensor_15": 8.4500,
+          "sensor_16": 0.03,
+          "sensor_17": 395,
+          "sensor_18": 2390,
+          "sensor_19": 100.0,
+          "sensor_20": 40.00
+        }
+      ]
+    }
+  ]
+}
+

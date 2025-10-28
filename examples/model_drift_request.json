@@ -1,0 +1,6 @@
+{
+  "engines": ["ENG-001", "ENG-002", "ENG-003"],
+  "lookback_hours": 24,
+  "threshold": 5.0
+}
+
