@@ -3,7 +3,7 @@
 ## Local Development Setup
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.11
 - pip
 - Virtual environment (venv)
 
@@ -61,7 +61,7 @@ python test_api.py
 Create a `Dockerfile`:
 
 ```dockerfile
-FROM python:3.9-slim
+FROM python:3.11
 
 WORKDIR /app
 

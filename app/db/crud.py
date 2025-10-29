@@ -136,13 +136,18 @@ def create_model_performance(
     validation_time: datetime,
 ) -> ModelPerformance:
     """Persist model performance metrics."""
+    # Ensure precision and recall are stored as JSON arrays of numbers
+    # Convert any integers to floats for consistency
+    precision_floats = [float(x) for x in precision] if precision else []
+    recall_floats = [float(x) for x in recall] if recall else []
+    
     record = ModelPerformance(
         mean_squared_error=mean_squared_error,
         mean_absolute_error=mean_absolute_error,
         mean_absolute_percentage_error=mean_absolute_percentage_error,
-        precision=json.dumps(precision),
-        recall=json.dumps(recall),
-        f1_score=json.dumps(f1_score),
+        precision=json.dumps(precision_floats),
+        recall=json.dumps(recall_floats),
+        f1_score=f1_score,
         validation_time=validation_time,
     )
     db.add(record)

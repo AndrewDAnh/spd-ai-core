@@ -111,18 +111,23 @@ class BiLSTMPredictionEngine:
         return NormalisationStats.from_dict(payload)
 
     def predict_from_api_data(self, engine_id: str, data: List[CmapssDataPoint]) -> int:
+        """Return binary classification based on 0.5 probability threshold."""
+        prob = self.predict_probability_from_api_data(engine_id, data)
+        return int(prob >= 0.5)
+
+    def predict_probability_from_api_data(self, engine_id: str, data: List[CmapssDataPoint]) -> float:
+        """Return failure probability (between 0 and 1) for the given engine."""
         df = self._api_data_to_dataframe(engine_id, data)
         processed = self._preprocess_dataframe(df)
         norm_df = self.stats.apply(processed)
-        windows, unit_ids = build_last_window(norm_df, self.sensors, self.seq_len)
+        windows, _ = build_last_window(norm_df, self.sensors, self.seq_len)
 
         tensor = torch.from_numpy(windows).to(self.device)
         with torch.no_grad():
             logits = self.model(tensor).squeeze()
             probs = torch.sigmoid(logits)
-            preds = (probs >= 0.5).long()
 
-        return int(preds.item())
+        return float(probs.item())
 
     def _api_data_to_dataframe(self, engine_id: str, data: List[CmapssDataPoint]) -> pd.DataFrame:
         rows = [point.model_dump() for point in data]
