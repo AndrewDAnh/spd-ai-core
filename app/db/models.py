@@ -46,3 +46,47 @@ class ModelPerformance(Base):
     validation_time = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, server_default=func.now())
 
+
+class ModelRegistry(Base):
+    """Registry storing metadata about available model artifacts."""
+
+    __tablename__ = "model_registry"
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_name = Column(String, unique=True, nullable=False)
+    model_type = Column(String, nullable=False)  # regression | classification
+    status = Column(String, nullable=False, default="ready")
+    artifact_path = Column(String, nullable=False)
+    metrics = Column(Text, nullable=True)  # JSON serialized metrics summary
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ModelTrainingJob(Base):
+    """Tracks asynchronous retraining jobs and associated datasets."""
+
+    __tablename__ = "model_training_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String, unique=True, nullable=False, index=True)
+    requested_models = Column(String, nullable=False)  # comma-separated model types
+    status = Column(String, nullable=False, default="queued")
+    progress = Column(Float, nullable=True)
+    progress_message = Column(String, nullable=True)
+    dataset_partition = Column(String, nullable=True)
+    dataset_metadata = Column(Text, nullable=True)  # JSON snapshot of payload metadata
+    artifact_paths = Column(Text, nullable=True)  # JSON {model_type: path}
+    metrics = Column(Text, nullable=True)  # JSON {model_type: metrics}
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ModelServingConfig(Base):
+    """Stores currently serving regression and classification models."""
+
+    __tablename__ = "model_serving_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    active_regression_model = Column(String, nullable=True)
+    active_classification_model = Column(String, nullable=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

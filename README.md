@@ -1,98 +1,33 @@
-# SPD-MVP: AI Model Validation & Inference API
+# API Documentation
 
-FastAPI service for jet engine asset management providing:
-- **STAR Model** inference pipeline (RUL prediction using Spatio-Temporal Attention)
-- Data validation (drift detection, quality checks)
-- Model drift monitoring (prediction stability tracking)
+## Overview
 
-## Features
+The SPD-MVP API helps you keep tabs on jet-engine health through three major capabilities:
+- **Inference** – Remaining Useful Life (RUL) predictions from the STAR regression model plus a BiLSTM failure classifier.
+- **Validation** – Drift detection and quality checks for incoming sensor feeds.
+- **Monitoring** – Model performance baselines, prediction history, and drift alerts.
 
-### Inference Pipeline ⭐ NEW
-- **STAR Regression Model**: State-of-the-art transformer architecture for RUL prediction
-- Batch predictions for multiple engines
-- C-MAPSS data format support (NASA turbofan dataset)
-- RUL (Remaining Useful Life) prediction with confidence scores
-- Failure prediction placeholder (classifier to be integrated)
-- Prediction history storage in SQLite
+## Base URL
 
-### Validation Pipeline
-- **Data Drift Detection**: KS test, PSI, Chi-square for distribution changes
-- **Data Quality Checks**: Missing values, outliers, schema validation
-- **Model Drift Detection**: Prediction stability tracking over time
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-cd spd-mvp
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment file
-cp .env.example .env
+```
+http://localhost:8000/api/v1
 ```
 
-### Using C-MAPSS Dataset
+## Inference Endpoints
 
-The API uses the C-MAPSS dataset format (NASA turbofan engine data):
+### POST /inference/predict/batch
 
-```bash
-# Preprocess C-MAPSS validation data
-python3 scripts/preprocess_cmapss.py
+Submit one or more engines and receive both RUL estimates and short-term failure warnings in a single call.
 
-# Start API
-uvicorn app.main:app --reload
+**Request Body:**
 
-# Test inference API
-python3 scripts/test_inference_api.py
-
-# Test validation API
-python3 scripts/test_cmapss_validation.py
-```
-
-See [docs/CMAPSS_INTEGRATION.md](docs/CMAPSS_INTEGRATION.md) for validation details and [docs/API.md](docs/API.md) for inference API documentation.
-
-### Run the API
-
-```bash
-# Start the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at: http://localhost:8000
-
-- **API Documentation**: http://localhost:8000/docs
-- **Alternative docs**: http://localhost:8000/redoc
-
-## API Endpoints
-
-### Health Check
-```bash
-GET /api/v1/health
-```
-
-### Inference Endpoints
-
-#### Batch Prediction
-```bash
-POST /api/v1/predict/batch
-```
-
-**Request (C-MAPSS Format):**
 ```json
 {
-  "batch_id": "batch_20250125_001",
+  "batch_id": "batch_001",
   "engines": [
     {
       "engine_id": "ENG-001",
-      "timestamp": "2025-01-25T10:30:00Z",
+      "timestamp": "2025-10-26T12:00:00Z",
       "data": [
         {
           "unit": 1,
@@ -100,18 +35,25 @@ POST /api/v1/predict/batch
           "setting_1": 0.0023,
           "setting_2": 0.0003,
           "setting_3": 100.0,
+          "s1": 518.67,
           "s2": 641.82,
-          "s3": 1589.7,
+          "s3": 1589.70,
           "s4": 1400.60,
+          "s5": 14.62,
+          "s6": 21.61,
           "s7": 554.36,
           "s8": 2388.06,
           "s9": 9046.19,
+          "s10": 1.30,
           "s11": 47.47,
           "s12": 521.66,
           "s13": 2388.02,
           "s14": 8138.62,
           "s15": 8.41,
+          "s16": 0.03,
           "s17": 392.00,
+          "s18": 2388.00,
+          "s19": 100.00,
           "s20": 39.06,
           "s21": 23.42
         }
@@ -121,319 +63,199 @@ POST /api/v1/predict/batch
 }
 ```
 
-Note: The API now uses C-MAPSS format with `unit`, `cycle`, `setting_1-3`, and sensors `s1-s21` (sensors are optional)
+**Field Descriptions:**
+
+- `batch_id`: Unique identifier for the batch
+- `engines`: Array of engine data objects
+  - `engine_id`: Unique identifier for the engine
+  - `timestamp`: ISO 8601 timestamp of the prediction request
+  - `data`: Array of time-step measurements in C-MAPSS format
+    - `unit`: Engine unit ID (integer)
+    - `cycle`: Cycle number (integer)
+    - `setting_1`, `setting_2`, `setting_3`: Operational settings
+    - `s1` to `s21`: Sensor readings (all optional, `null` for missing values)
+
+**Important Notes:**
+
+1. **C-MAPSS Format** – Stick to the NASA turbofan schema (3 settings + 21 sensors). We keep optional sensors nullable so validation can detect gaps.
+2. **Sequence Length** – 128 time steps give the STAR model the temporal context it expects. Shorter sequences work but you will lose accuracy.
+3. **Sensor Subset** – The regression model leans on 14 sensors: s2, s3, s4, s7, s8, s9, s11, s12, s13, s14, s15, s17, s20, s21. Still supply all readings you have; we handle the rest internally.
+4. **Classification Threshold** – The BiLSTM marks `is_going_to_fail` as `true` when failure probability ≥ 0.5. Future releases will let you tune this threshold per request.
 
 **Response:**
+
 ```json
 {
-  "prediction_id": "pred_abc123",
-  "batch_id": "batch_20250125_001",
-  "timestamp": "2025-01-25T10:30:05Z",
+  "prediction_id": "pred_abc123def456",
+  "batch_id": "batch_001",
+  "timestamp": "2025-10-26T12:00:01.234567",
   "predictions": [
     {
       "engine_id": "ENG-001",
-      "prediction_time": "2025-01-25T10:30:05Z",
+      "prediction_time": "2025-10-26T12:00:01.234567",
       "remaining_useful_life": 85.34,
-      "is_going_to_fail": null,
+      "is_going_to_fail": false,
       "confidence": 0.87
     }
   ]
 }
 ```
 
-Note: `is_going_to_fail` is currently `null` as the classification model is not yet integrated
+**Response Field Descriptions:**
 
-#### Get Prediction History
-```bash
-GET /api/v1/predict/history/{engine_id}?limit=100
+- `remaining_useful_life`: Predicted RUL in cycles (float)
+- `is_going_to_fail`: `true` when the BiLSTM classifier believes failure is imminent based on a 0.5 probability cut-off. This field becomes `null` only if the classifier fails to load at startup.
+- `confidence`: Regression-side confidence heuristic ranging from 0.0 to 1.0. High values mean the RUL falls squarely in healthy or critical territory; mid-range values are more ambiguous.
+
+**Status Codes:**
+
+- `200 OK`: Prediction successful
+- `422 Unprocessable Entity`: Invalid request format
+- `500 Internal Server Error`: Model inference error
+
+### GET /inference/predict/history/{engine_id}
+
+Retrieve the stored predictions (regression + classification + confidence) for a specific engine.
+
+**Query Parameters:**
+
+- `start_date` (optional): Filter predictions after this date (ISO 8601)
+- `end_date` (optional): Filter predictions before this date (ISO 8601)
+- `limit` (optional): Maximum number of predictions to return (default: 100)
+
+**Example:**
+
+```
+GET /api/v1/inference/predict/history/ENG-001?limit=50
 ```
 
-### Validation Endpoints
+**Response:**
 
-#### Store Reference Baseline
-```bash
-POST /api/v1/validate/reference
-```
-
-**Request:**
 ```json
 {
   "engine_id": "ENG-001",
-  "reference_data": [
-    {"sensor_1": 518.5, "sensor_2": 642.0, "sensor_3": 1590.0},
-    {"sensor_1": 518.6, "sensor_2": 642.2, "sensor_3": 1590.5}
-  ]
-}
-```
-
-#### Batch Validation (Drift + Quality)
-```bash
-POST /api/v1/validate/batch
-```
-
-**Request:**
-```json
-{
-  "validation_id": "val_20250125_001",
-  "engines": [
+  "predictions": [
     {
       "engine_id": "ENG-001",
-      "data": [
-        {"sensor_1": 525.2, "sensor_2": 650.5, "sensor_3": 1600.0}
-      ]
+      "prediction_time": "2025-10-26T12:00:00Z",
+      "remaining_useful_life": 85.34,
+      "is_going_to_fail": false,
+      "confidence": 0.87
     }
   ],
-  "use_stored_reference": true,
-  "config": {
-    "drift_threshold": 0.2,
-    "outlier_sensitivity": "medium"
-  }
+  "total_count": 50
 }
 ```
+
+## Validation Endpoints
+
+- **POST /validate/batch** – Run drift and quality checks together. Optional overrides allow to tweak PSI thresholds or skip stored baselines.
+- **POST /validate/drift** – Compare incoming feature distributions against the reference baseline using PSI and KS tests.
+- **POST /validate/quality** – Flag missing values, constant columns, and statistical anomalies without running drift.
+- **POST /validate/reference** – Upload or refresh a reference baseline. Useful when an engine changes operating regimes.
+- **GET /validate/summary** – Quick snapshot of recent validations (counts of high/medium issues, drift detections, engines monitored).
+
+## Performance & Monitoring Endpoints
+
+- **POST /models/performance/run** – Executes the full FD001 benchmark: STAR regression metrics (MSE, MAE, MAPE) plus classification precision/recall at six probability thresholds (0.0 → 1.0 in steps of 0.2). Results are stored for later comparison.
+- **GET /models/performance** – Fetch the most recent performance record, including MAE, MSE, MAPE for regression model, and precision, recall, f1 for classification model.
+- **POST /validate/model-drift** *(see dedicated docs)* – Evaluate prediction stability over time per engine for RUL prediction. Formula is calculated as `|RUL_current - RUL_previous| / hours_elapsed`
+- **GET /inference/predict/history/{engine_id}** – Already covered above; handy for ad-hoc drift investigations.
+
+## Health Check
+
+### GET /health
+
+Check API health status.
 
 **Response:**
+
 ```json
 {
-  "validation_id": "val_20250125_001",
-  "timestamp": "2025-01-25T10:35:00Z",
-  "summary": {
-    "total_engines": 1,
-    "engines_with_issues": 0,
-    "high_severity_count": 0,
-    "medium_severity_count": 0,
-    "drift_detected_count": 0
-  },
-  "engines": [
-    {
-      "engine_id": "ENG-001",
-      "status": "ok",
-      "drift_detected": false,
-      "quality_passed": true
-    }
-  ]
+  "status": "healthy",
+  "timestamp": "2025-10-26T12:00:00.123456",
+  "version": "1.0.0"
 }
 ```
 
-#### Data Drift Detection Only
-```bash
-POST /api/v1/validate/drift
-```
-
-#### Data Quality Check Only
-```bash
-POST /api/v1/validate/quality
-```
-
-#### Model Drift Detection
-```bash
-POST /api/v1/validate/model-drift
-```
-
-**Request:**
-```json
-{
-  "engines": ["ENG-001", "ENG-002"],
-  "lookback_hours": 24,
-  "threshold": 5.0
-}
-```
-
-**Response:**
-```json
-{
-  "timestamp": "2025-01-25T10:35:00Z",
-  "summary": {
-    "total_engines": 2,
-    "unstable_engines": 0,
-    "avg_stability_score": 2.1
-  },
-  "engines": [
-    {
-      "engine_id": "ENG-001",
-      "status": "stable",
-      "prediction_count": 48,
-      "avg_rul_change_rate": 2.1,
-      "max_rul_change_rate": 4.5,
-      "consecutive_predictions": [
-        {
-          "time": "2025-01-25T08:00:00Z",
-          "rul": 145.5,
-          "change_rate": null
-        },
-        {
-          "time": "2025-01-25T09:00:00Z",
-          "rul": 143.2,
-          "change_rate": 2.3
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### Validation Summary
-```bash
-GET /api/v1/validate/summary
-```
-
-## Example Usage with cURL
-
-### Make a Prediction
-```bash
-curl -X POST "http://localhost:8000/api/v1/predict/batch" \
-  -H "Content-Type: application/json" \
-  -d @examples/predict_request.json
-```
-
-### Validate Data
-```bash
-# First, store reference baseline
-curl -X POST "http://localhost:8000/api/v1/validate/reference" \
-  -H "Content-Type: application/json" \
-  -d @examples/reference_request.json
-
-# Then validate current data
-curl -X POST "http://localhost:8000/api/v1/validate/batch" \
-  -H "Content-Type: application/json" \
-  -d @examples/validation_request.json
-```
-
-### Check Model Drift
-```bash
-curl -X POST "http://localhost:8000/api/v1/validate/model-drift" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "engines": ["ENG-001", "ENG-002"],
-    "lookback_hours": 24,
-    "threshold": 5.0
-  }'
-```
-
-## Configuration
-
-Edit `.env` file to configure:
-
-```bash
-# Application
-APP_NAME=SPD-MVP
-DEBUG=True
-
-# Database
-DATABASE_URL=sqlite:///./data/predictions.db
-
-# Model Settings - STAR Regression Model
-REGRESSION_MODEL_PATH=models/regression/fd001
-DEVICE=cuda  # or 'cpu'
-FAILURE_THRESHOLD=30
-
-# Validation
-DRIFT_THRESHOLD=0.2
-PSI_THRESHOLD=0.2
-OUTLIER_SENSITIVITY=medium  # low, medium, high
-```
-
-## Architecture
-
-```
-spd-mvp/
-├── app/
-│   ├── main.py                 # FastAPI application
-│   ├── api/endpoints/          # API route handlers
-│   ├── core/                   # Config, database, logging
-│   ├── db/                     # Database models & CRUD
-│   ├── services/               # Business logic
-│   │   ├── preprocessor.py
-│   │   ├── model_inference.py
-│   │   ├── drift_detector.py
-│   │   ├── quality_checker.py
-│   │   └── model_drift.py
-│   ├── models/schemas.py       # Pydantic models
-│   └── utils/                  # Utilities
-└── data/                       # SQLite database
-```
-
-## Data Flow
-
-### Inference Pipeline
-1. Client sends time-series data
-2. Data preprocessing (cleaning, scaling)
-3. Model inference (RUL prediction)
-4. Store predictions in SQLite
-5. Return predictions with confidence
-
-### Validation Pipeline
-1. Client sends current data + reference baseline
-2. **Drift Detection**: Statistical tests (KS, PSI, Chi-square)
-3. **Quality Checks**: Missing values, outliers, schema
-4. **Model Drift**: Query prediction history, calculate stability
-5. Return validation results with severity levels
-
-## Drift Detection Methods
-
-### Data Drift
-- **KS Test**: Kolmogorov-Smirnov test for numerical distributions
-- **PSI**: Population Stability Index for binned distributions
-- **Chi-square**: Chi-square test for categorical features
-
-### Model Drift
-- **Prediction Stability**: `|RUL_current - RUL_previous| / hours_elapsed`
-- Tracks prediction volatility over time
-- Flags engines with high change rates
-
-## Model Architecture
+## Model Information
 
 ### STAR Regression Model
 
-The inference API uses the **STAR** (Spatio-Temporal Attention for RUL) model:
+- **Architecture** – Multi-scale transformer with temporal and sensor attention stages.
+- **Input Window** – 128 × 14 feature matrix after sensor selection and normalization.
+- **Output** – Continuous RUL prediction in cycles.
+- **Training Data** – C-MAPSS FD001 split (same format as inference requests).
 
-- **Architecture**: Multi-scale transformer with two-stage attention (temporal + sensor)
-- **Input**: 128 time steps × 14 sensors
-- **Output**: RUL prediction (cycles remaining)
-- **Training Dataset**: C-MAPSS FD001 (NASA turbofan degradation)
-- **Performance**: State-of-the-art accuracy on turbofan RUL prediction
+### BiLSTM Classification Model
 
-**Key Features:**
-- Patch-based embedding for efficient processing
-- Hierarchical encoder-decoder with 3 scales
-- Two-stage attention: temporal (within sensors) + sensor (across sensors)
-- Pre-trained on NASA C-MAPSS FD001 dataset
+- **Goal** – Binary early-warning signal (`is_going_to_fail`) telling whether the engine is going to fail within the next 30 cycles.
+- **Output Surface** – Currently exposes the boolean decision via the API. The raw probability feeds multi-threshold metrics in the performance service.
 
-### Classification Model (Placeholder)
+## Error Handling
 
-The failure classification model is not yet integrated. The API returns `null` for `is_going_to_fail` until the classifier is available.
+All endpoints return standard HTTP status codes and error messages:
 
-## MVP Status
+```json
+{
+  "detail": "Error message describing what went wrong"
+}
+```
 
-Current implementation:
-- ✅ **STAR Regression Model**: Fully integrated and operational
-- ✅ **C-MAPSS Data Format**: Native support
-- ✅ **Batch Inference**: Multiple engines in single request
-- ✅ **Validation Pipeline**: Drift detection and quality checks
-- ✅ **Model Drift Monitoring**: Prediction stability tracking
-- ⏳ **Classification Model**: Placeholder (to be integrated)
-- ❌ **Authentication**: Not implemented (add for production)
-- ❌ **Comprehensive Tests**: Limited test coverage
+## Starting Application
 
-## Production Recommendations
+Use the provided script:
 
-For production deployment:
-1. ✅ ~~Replace mock model with trained model~~ (DONE - STAR model integrated)
-2. Integrate classification model for `is_going_to_fail` prediction
-3. Add authentication (JWT, OAuth2)
-4. Add comprehensive test suite
-5. Use PostgreSQL instead of SQLite
-6. Add monitoring and alerting
-7. Implement rate limiting
-8. Add request validation middleware
-9. Deploy with Docker/Kubernetes
-10. Add CI/CD pipeline
-11. Implement proper logging aggregation
+```bash
+# Start the API
+uvicorn app.main:app --host 0.0.0.0 --port [YOUR_PORT_NUMBER]
+```
 
-## License
+## Examples
 
-Proprietary - Client Project
+### Complete Example: Single Engine Prediction
 
-## Contact
+```python
+import requests
+from datetime import datetime
 
-For questions about this MVP, contact the development team.
+# Prepare request
+url = f"http://{HOST}:{PORT}/api/v1/inference/predict/batch"
+data = {
+    "batch_id": "test_001",
+    "engines": [{
+        "engine_id": "ENG-001",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    "data": [
+      {
+        "unit": 1,
+        "cycle": i,
+        "setting_1": 0.0023,
+        "setting_2": 0.0003,
+        "setting_3": 100.0,
+        "s1": 642.0,
+        "s2": 1580.0
+        # Populate remaining sensors as needed
+      }
+      for i in range(128)
+    ]
+    }]
+}
 
+# Make request
+response = requests.post(url, json=data)
+result = response.json()
+
+# Extract prediction
+pred = result['predictions'][0]
+print(f"Predicted RUL: {pred['remaining_useful_life']:.2f} cycles")
+print(f"Failure warning: {pred['is_going_to_fail']}")
+```
+
+## Integration with Validation API
+
+The inference API can be used together with the validation API:
+
+1. **Predict** – Call `/inference/predict/batch` to score a fleet.
+2. **Validate** – Run `/validate/batch` on the same payload to spot quality or distribution issues.
+3. **Monitor** – Use `/models/performance` for periodic benchmarks and `/validate/summary` for day-to-day oversight.

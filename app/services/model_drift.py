@@ -172,4 +172,3 @@ class ModelDriftDetector:
             'consecutive_predictions': consecutive_preds[:10],  # Limit to 10
             'alert': alert
         }
-

@@ -47,4 +47,3 @@ def aggregate_drift_scores(feature_drifts: Dict[str, Dict]) -> Dict[str, Dict]:
         del data['scores']  # Remove raw scores from output
     
     return aggregated
-

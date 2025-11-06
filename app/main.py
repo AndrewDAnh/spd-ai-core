@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.logging_config import logger
-from app.api.endpoints import health, inference, validation, performance
+from app.api.endpoints import health, inference, validation, performance, training
 
 settings = get_settings()
 
@@ -29,6 +29,7 @@ app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(inference.router, prefix="/api/v1", tags=["Inference"])
 app.include_router(validation.router, prefix="/api/v1", tags=["Validation"])
 app.include_router(performance.router, prefix="/api/v1", tags=["Performance"])
+app.include_router(training.router, prefix="/api/v1", tags=["Training"])
 
 
 @app.on_event("startup")
@@ -56,4 +57,3 @@ async def root():
         "status": "running",
         "docs": "/docs"
     }
-

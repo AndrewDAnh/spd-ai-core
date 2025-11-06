@@ -315,6 +315,7 @@ class STARPredictionEngine:
         checkpoint: str | pathlib.Path | None = None,
         device: str | torch.device | None = None,
         smoothing_window: int = 5,
+        load_checkpoint: bool = True,
     ) -> None:
         self.run_dir = pathlib.Path(run_dir)
         if not self.run_dir.exists():
@@ -349,14 +350,15 @@ class STARPredictionEngine:
             dropout=model_cfg.get("dropout", 0.1),
         ).to(self.device)
         
-        ckpt_path = pathlib.Path(checkpoint) if checkpoint else self.run_dir / "checkpoints" / "best.pt"
-        logger.info(f"Loading checkpoint from {ckpt_path}")
-        state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
-        if "model" in state:
-            state = state["model"]
-        self.model.load_state_dict(state)
-        self.model.eval()
-        logger.info("STAR model loaded successfully")
+        if load_checkpoint:
+            ckpt_path = pathlib.Path(checkpoint) if checkpoint else self.run_dir / "checkpoints" / "best.pt"
+            logger.info(f"Loading checkpoint from {ckpt_path}")
+            state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
+            if "model" in state:
+                state = state["model"]
+            self.model.load_state_dict(state)
+            self.model.eval()
+            logger.info("STAR model loaded successfully")
 
     def _load_normalisation(self, path: pathlib.Path) -> NormalisationStats:
         """Load normalisation statistics from JSON file."""
@@ -488,4 +490,3 @@ class STARPredictionEngine:
         unit_df.reset_index(inplace=True)
         unit_df.rename(columns={"index": "cycle"}, inplace=True)
         return unit_df
-

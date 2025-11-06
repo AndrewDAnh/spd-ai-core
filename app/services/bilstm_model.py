@@ -68,6 +68,7 @@ class BiLSTMPredictionEngine:
         checkpoint: str | pathlib.Path | None = None,
         device: str | torch.device | None = None,
         smoothing_window: int = 5,
+        load_checkpoint: bool = True,
     ) -> None:
         self.run_dir = pathlib.Path(run_dir)
         if not self.run_dir.exists():
@@ -96,14 +97,15 @@ class BiLSTMPredictionEngine:
             dropout=model_cfg.get("dropout", 0.2),
         ).to(self.device)
 
-        ckpt_path = pathlib.Path(checkpoint) if checkpoint else self.run_dir / "checkpoints" / "best_classifier.pt"
-        logger.info(f"Loading checkpoint from {ckpt_path}")
-        state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
-        if "model_state_dict" in state:
-            state = state["model_state_dict"]
-        self.model.load_state_dict(state)
-        self.model.eval()
-        logger.info("BiLSTM model loaded successfully")
+        if load_checkpoint:
+            ckpt_path = pathlib.Path(checkpoint) if checkpoint else self.run_dir / "checkpoints" / "best_classifier.pt"
+            logger.info(f"Loading checkpoint from {ckpt_path}")
+            state = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+            if "model_state_dict" in state:
+                state = state["model_state_dict"]
+            self.model.load_state_dict(state)
+            self.model.eval()
+            logger.info("BiLSTM model loaded successfully")
 
     def _load_normalisation(self, path: pathlib.Path) -> NormalisationStats:
         with path.open("r", encoding="utf-8") as fp:

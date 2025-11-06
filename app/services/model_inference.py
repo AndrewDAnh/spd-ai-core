@@ -9,33 +9,67 @@ from app.services.bilstm_model import BiLSTMPredictionEngine
 
 
 class ModelInferenceService:
-    """Service for model inference using STAR regression model"""
-    
-    def __init__(self):
+    """Service for model inference"""
+
+    def __init__(
+        self,
+        regression_run_dir: Optional[str] = None,
+        classification_run_dir: Optional[str] = None,
+    ):
         self.settings = get_settings()
+        self.regression_run_dir = regression_run_dir or self.settings.REGRESSION_MODEL_PATH
+        self.classification_run_dir = classification_run_dir or self.settings.CLASSIFICATION_MODEL_PATH
         self.regression_model: Optional[STARPredictionEngine] = None
         self.classification_model: Optional[BiLSTMPredictionEngine] = None
         self._load_models()
-    
+
     def _load_models(self):
         """Load trained models"""
         try:
+            self.regression_model = None
+            self.classification_model = None
             logger.info("Loading STAR regression model...")
             self.regression_model = STARPredictionEngine(
-                run_dir=self.settings.REGRESSION_MODEL_PATH,
+                run_dir=self.regression_run_dir,
                 device=self.settings.DEVICE,
                 smoothing_window=5
             )
-            logger.info("Loading BiLSTM regression model...")
+            logger.info("Loading BiLSTM classification model...")
             self.classification_model = BiLSTMPredictionEngine(
-                run_dir=self.settings.CLASSIFICATION_MODEL_PATH,
+                run_dir=self.classification_run_dir,
                 device=self.settings.DEVICE,
                 smoothing_window=5
             )
-            logger.info("STAR regression model loaded successfully")
+            logger.info(
+                "Inference models loaded (regression_dir=%s, classification_dir=%s)",
+                self.regression_run_dir,
+                self.classification_run_dir,
+            )
         except Exception as e:
             logger.error(f"Failed to load regression model: {str(e)}")
             logger.warning("Model inference will not be available")
+            raise
+
+    def reload_models(
+        self,
+        *,
+        regression_run_dir: Optional[str] = None,
+        classification_run_dir: Optional[str] = None,
+    ) -> None:
+        """Reload models from new run directories, falling back to existing ones."""
+        previous_regression_dir = self.regression_run_dir
+        previous_classification_dir = self.classification_run_dir
+        if regression_run_dir:
+            self.regression_run_dir = regression_run_dir
+        if classification_run_dir:
+            self.classification_run_dir = classification_run_dir
+        try:
+            self._load_models()
+        except Exception:
+            logger.exception("Failed to reload models, restoring previous configuration")
+            self.regression_run_dir = previous_regression_dir
+            self.classification_run_dir = previous_classification_dir
+            self._load_models()
             raise
   
     def predict(
@@ -96,4 +130,3 @@ class ModelInferenceService:
         else:
             # Middle range - moderate confidence
             return np.clip(0.75 + np.random.uniform(-0.05, 0.05), 0.70, 0.80)
-

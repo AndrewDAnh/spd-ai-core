@@ -79,4 +79,3 @@ def get_engine_cycle_count(df: pd.DataFrame, engine_id: int) -> int:
         Number of cycles for the engine
     """
     return len(df[df["unit"] == engine_id])
-

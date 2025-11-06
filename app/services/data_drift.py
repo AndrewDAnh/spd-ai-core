@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 from app.core.logging_config import logger
 
 
-class DriftDetector:
+class DataDriftDetector:
     """Service for detecting data drift"""
     
     def __init__(self, threshold: float = 0.2):
@@ -184,4 +184,3 @@ class DriftDetector:
             'status': status,
             'p_value': float(p_value)
         }
-

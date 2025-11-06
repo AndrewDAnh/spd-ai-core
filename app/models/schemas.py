@@ -217,7 +217,7 @@ class ValidationMetrics(BaseModel):
 
 
 class ModelPerformanceMetrics(BaseModel):
-    """Stored model performance metrics for the STAR regression model."""
+    """Stored model performance metrics."""
 
     mean_squared_error: float
     mean_absolute_error: float
@@ -226,6 +226,107 @@ class ModelPerformanceMetrics(BaseModel):
     recall: List[float] = Field(default_factory=list)
     f1_score: float = Field(default_factory=float)
     validation_time: datetime
+
+
+# ============= Continuous Training Schemas =============
+
+
+class RegressionRetrainSample(BaseModel):
+    """Single regression training sample containing full sequence and target RUL."""
+
+    engine_id: str
+    data: List[CmapssDataPoint]
+    target_rul: float
+
+
+class ClassificationRetrainSample(BaseModel):
+    """Single classification training sample containing sequence and binary label."""
+
+    engine_id: str
+    data: List[CmapssDataPoint]
+    label: int
+
+
+class RetrainingDataset(BaseModel):
+    """Dataset payload supplied by the web backend for retraining."""
+
+    partition: str
+    regression_samples: Optional[List[RegressionRetrainSample]] = None
+    classification_samples: Optional[List[ClassificationRetrainSample]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class RetrainingRequest(BaseModel):
+    """Request body for triggering model retraining."""
+
+    job_id: Optional[str] = None
+    retrain_regression: bool = False
+    retrain_classification: bool = False
+    dataset: RetrainingDataset
+
+    def requested_model_types(self) -> List[str]:
+        requested: List[str] = []
+        if self.retrain_regression:
+            requested.append("regression")
+        if self.retrain_classification:
+            requested.append("classification")
+        return requested
+
+
+class TrainingJobStatus(BaseModel):
+    """Response describing the state of a retraining job."""
+
+    job_id: str
+    status: str
+    progress: Optional[float] = None
+    progress_message: Optional[str] = None
+    requested_models: List[str]
+    dataset_partition: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    artifact_paths: Optional[Dict[str, str]] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TrainingJobUpdateRequest(BaseModel):
+    """Payload from the web backend to push manual job progress updates."""
+
+    status: Optional[str] = None
+    progress: Optional[float] = None
+    progress_message: Optional[str] = None
+
+
+class ModelRegistryEntry(BaseModel):
+    """Single entry in the model registry."""
+
+    model_name: str
+    model_type: str
+    status: str
+    artifact_path: str
+    metrics: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ModelRegistryResponse(BaseModel):
+    """Response listing all models available in the registry."""
+
+    models: List[ModelRegistryEntry]
+
+
+class ModelSelectionRequest(BaseModel):
+    """Request to select regression and classification models for serving."""
+
+    regression_model: Optional[str] = None
+    classification_model: Optional[str] = None
+
+
+class ModelSelectionResponse(BaseModel):
+    """Response after updating active serving models."""
+
+    active_regression_model: Optional[str]
+    active_classification_model: Optional[str]
+    updated_at: datetime
 
 
 # Health Check Schema

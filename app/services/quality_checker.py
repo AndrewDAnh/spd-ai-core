@@ -206,4 +206,3 @@ class QualityChecker:
 
 # Import stats for zscore
 from scipy import stats
-

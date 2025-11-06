@@ -16,7 +16,7 @@ from app.models.schemas import (
 )
 from app.core.database import get_db
 from app.db import crud
-from app.services.drift_detector import DriftDetector
+from app.services.data_drift import DataDriftDetector
 from app.services.quality_checker import QualityChecker
 from app.services.model_drift import ModelDriftDetector
 from app.core.config import get_settings
@@ -54,7 +54,7 @@ async def validate_batch(
         drift_threshold = config.drift_threshold if hasattr(config, 'drift_threshold') else settings.DRIFT_THRESHOLD
         outlier_sensitivity = config.outlier_sensitivity if hasattr(config, 'outlier_sensitivity') else settings.OUTLIER_SENSITIVITY
         
-        drift_detector = DriftDetector(threshold=drift_threshold)
+        drift_detector = DataDriftDetector(threshold=drift_threshold)
         quality_checker = QualityChecker(outlier_sensitivity=outlier_sensitivity)
         
         engine_results = []
@@ -223,7 +223,7 @@ async def validate_drift(
         config = request.config or {}
         drift_threshold = config.drift_threshold if hasattr(config, 'drift_threshold') else settings.DRIFT_THRESHOLD
         
-        drift_detector = DriftDetector(threshold=drift_threshold)
+        drift_detector = DataDriftDetector(threshold=drift_threshold)
         
         results = []
         
@@ -338,4 +338,3 @@ async def get_validation_summary():
         recent_quality_issues=validation_metrics['recent_quality_issues'],
         engines_monitored=len(validation_metrics['engines_monitored'])
     )
-
