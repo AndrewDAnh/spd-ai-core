@@ -1,7 +1,17 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from enum import Enum
+
+
+# Global Pydantic configuration for RFC3339 datetime serialization
+class RFC3339BaseModel(BaseModel):
+    """Base model with RFC3339 datetime serialization."""
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda v: v.isoformat() if v.tzinfo else v.replace(tzinfo=None).isoformat() + 'Z'
+        }
+    )
 
 
 # ============= Inference Schemas =============
@@ -35,7 +45,7 @@ class CmapssDataPoint(BaseModel):
     s21: Optional[float] = None
 
 
-class EngineData(BaseModel):
+class EngineData(RFC3339BaseModel):
     """Single engine's time-series data for prediction"""
     engine_id: str
     timestamp: datetime
@@ -48,7 +58,7 @@ class BatchPredictionRequest(BaseModel):
     engines: List[EngineData]
 
 
-class PredictionResult(BaseModel):
+class PredictionResult(RFC3339BaseModel):
     """Single prediction result"""
     engine_id: str
     prediction_time: datetime
@@ -57,7 +67,7 @@ class PredictionResult(BaseModel):
     confidence: float
 
 
-class BatchPredictionResponse(BaseModel):
+class BatchPredictionResponse(RFC3339BaseModel):
     """Batch prediction response"""
     prediction_id: str
     batch_id: str
@@ -156,7 +166,7 @@ class ValidationSummary(BaseModel):
     drift_detected_count: int
 
 
-class BatchValidationResponse(BaseModel):
+class BatchValidationResponse(RFC3339BaseModel):
     """Batch validation response"""
     validation_id: str
     timestamp: datetime
@@ -174,7 +184,7 @@ class ModelDriftRequest(BaseModel):
     threshold: float = 5.0
 
 
-class PredictionChange(BaseModel):
+class PredictionChange(RFC3339BaseModel):
     """Single prediction in time-series"""
     time: datetime
     rul: float
@@ -199,7 +209,7 @@ class ModelDriftSummary(BaseModel):
     avg_stability_score: Optional[float] = None
 
 
-class ModelDriftResponse(BaseModel):
+class ModelDriftResponse(RFC3339BaseModel):
     """Response for model drift detection"""
     timestamp: datetime
     summary: ModelDriftSummary
@@ -216,7 +226,7 @@ class ValidationMetrics(BaseModel):
     engines_monitored: int
 
 
-class ModelPerformanceMetrics(BaseModel):
+class ModelPerformanceMetrics(RFC3339BaseModel):
     """Stored model performance metrics."""
 
     mean_squared_error: float
@@ -273,7 +283,7 @@ class RetrainingRequest(BaseModel):
         return requested
 
 
-class TrainingJobStatus(BaseModel):
+class TrainingJobStatus(RFC3339BaseModel):
     """Response describing the state of a retraining job."""
 
     job_id: str
@@ -296,7 +306,7 @@ class TrainingJobUpdateRequest(BaseModel):
     progress_message: Optional[str] = None
 
 
-class ModelRegistryEntry(BaseModel):
+class ModelRegistryEntry(RFC3339BaseModel):
     """Single entry in the model registry."""
 
     model_name: str
@@ -321,7 +331,7 @@ class ModelSelectionRequest(BaseModel):
     classification_model: Optional[str] = None
 
 
-class ModelSelectionResponse(BaseModel):
+class ModelSelectionResponse(RFC3339BaseModel):
     """Response after updating active serving models."""
 
     active_regression_model: Optional[str]
@@ -331,7 +341,7 @@ class ModelSelectionResponse(BaseModel):
 
 # Health Check Schema
 
-class HealthResponse(BaseModel):
+class HealthResponse(RFC3339BaseModel):
     """Health check response"""
     status: str
     timestamp: datetime

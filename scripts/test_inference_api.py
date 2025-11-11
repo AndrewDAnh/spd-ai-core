@@ -7,7 +7,7 @@ Usage:
 
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 
 BASE_URL = "http://localhost:8000"
 
@@ -24,7 +24,7 @@ def test_batch_prediction():
         "engines": [
             {
                 "engine_id": "ENG-001",
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(UTC).isoformat(),
                 "data": [
                     {
                         "unit": 1,

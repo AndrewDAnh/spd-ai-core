@@ -159,7 +159,7 @@ GET /api/v1/inference/predict/history/ENG-001?limit=50
 
 - **POST /models/performance/run** – Executes the full FD001 benchmark: STAR regression metrics (MSE, MAE, MAPE) plus classification precision/recall at six probability thresholds (0.0 → 1.0 in steps of 0.2). Results are stored for later comparison.
 - **GET /models/performance** – Fetch the most recent performance record, including MAE, MSE, MAPE for regression model, and precision, recall, f1 for classification model.
-- **POST /validate/model-drift** *(see dedicated docs)* – Evaluate prediction stability over time per engine for RUL prediction. Formula is calculated as `|RUL_current - RUL_previous| / hours_elapsed`
+- **POST /validate/model-drift** – Evaluate prediction stability over time per engine for RUL prediction. Formula is calculated as `|RUL_current - RUL_previous| / hours_elapsed`
 - **GET /inference/predict/history/{engine_id}** – Already covered above; handy for ad-hoc drift investigations.
 
 ## Health Check
@@ -225,7 +225,7 @@ data = {
     "batch_id": "test_001",
     "engines": [{
         "engine_id": "ENG-001",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(UTC.isoformat() + "Z",
     "data": [
       {
         "unit": 1,

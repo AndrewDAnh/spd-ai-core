@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from datetime import datetime, UTC
+from typing import List, Dict
 import numpy as np
 
 from app.db import crud
@@ -77,7 +77,7 @@ class ModelDriftDetector:
             }
             
             return {
-                'timestamp': datetime.utcnow(),
+                'timestamp': datetime.now(UTC).isoformat(),
                 'summary': summary,
                 'engines': engine_results
             }

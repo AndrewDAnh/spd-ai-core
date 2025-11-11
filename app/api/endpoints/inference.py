@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 import uuid
 
@@ -35,7 +35,7 @@ async def predict_batch(
     try:
         # Generate unique prediction ID
         prediction_id = f"pred_{uuid.uuid4().hex[:12]}"
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(UTC).isoformat()
         
         predictions = []
         

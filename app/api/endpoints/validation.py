@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict
 
 from app.models.schemas import (
@@ -161,7 +161,7 @@ async def validate_batch(
         
         return BatchValidationResponse(
             validation_id=request.validation_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC).isoformat(),
             summary=summary,
             engines=engine_results,
             detailed_stats=detailed_stats if detailed_stats else None
@@ -189,7 +189,7 @@ async def store_reference(
         # Also store in database
         baseline_data = {
             'data': request.reference_data,
-            'updated_at': datetime.utcnow().isoformat()
+            'updated_at': datetime.now(UTC).isoformat()
         }
         crud.create_or_update_baseline(
             db=db,
@@ -257,7 +257,7 @@ async def validate_drift(
         
         return {
             'validation_id': request.validation_id,
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'results': results
         }
         
@@ -287,7 +287,7 @@ async def validate_quality(request: BatchValidationRequest):
         
         return {
             'validation_id': request.validation_id,
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.now(UTC).isoformat(),
             'results': results
         }
         

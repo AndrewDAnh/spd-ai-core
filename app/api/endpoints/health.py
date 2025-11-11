@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from datetime import datetime
+from datetime import datetime, UTC
 from app.models.schemas import HealthResponse
 from app.core.config import get_settings
 
@@ -12,7 +12,7 @@ async def health_check():
     """Health check endpoint"""
     return HealthResponse(
         status="healthy",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC).isoformat(),
         version=settings.APP_VERSION
     )
 

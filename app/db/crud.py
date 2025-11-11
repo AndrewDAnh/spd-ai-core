@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional
 import json
 
@@ -71,7 +71,7 @@ def get_recent_predictions_by_engine(
     lookback_hours: int = 24
 ) -> List[Prediction]:
     """Get recent predictions for an engine within lookback window"""
-    cutoff_time = datetime.utcnow() - timedelta(hours=lookback_hours)
+    cutoff_time = datetime.now(UTC) - timedelta(hours=lookback_hours)
     return db.query(Prediction).filter(
         Prediction.engine_id == engine_id,
         Prediction.prediction_time >= cutoff_time
@@ -84,7 +84,7 @@ def get_consecutive_predictions(
     lookback_hours: int = 24
 ) -> List[Prediction]:
     """Get consecutive predictions for model drift analysis"""
-    cutoff_time = datetime.utcnow() - timedelta(hours=lookback_hours)
+    cutoff_time = datetime.now(UTC) - timedelta(hours=lookback_hours)
     return db.query(Prediction).filter(
         Prediction.engine_id == engine_id,
         Prediction.prediction_time >= cutoff_time
@@ -107,7 +107,7 @@ def create_or_update_baseline(
     
     if db_baseline:
         db_baseline.baseline_data = baseline_json
-        db_baseline.updated_at = datetime.utcnow()
+        db_baseline.updated_at = datetime.now(UTC).isoformat()
     else:
         db_baseline = ReferenceBaseline(
             engine_id=engine_id,
