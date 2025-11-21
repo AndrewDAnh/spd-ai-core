@@ -23,7 +23,6 @@ from app.core.logging_config import logger
 from app.models.schemas import CmapssDataPoint
 from app.services.model_inference import ModelInferenceService
 from app.utils.cmapss_loader import load_test_dataset, load_rul_values
-from datetime import UTC
 
 
 @dataclass
@@ -86,7 +85,7 @@ class ModelPerformanceService:
             predicted_rul, is_going_to_fail, _ = self.model_service.predict(
                 engine_id=engine_key,
                 data=datapoints,
-                timestamp=datetime.now(UTC).isoformat(),
+                timestamp=datetime.now(UTC),
             )
 
             # Store RUL predictions and targets
@@ -145,7 +144,7 @@ class ModelPerformanceService:
         else:
             logger.warning("Classification model unavailable - using placeholder metrics")
 
-        validation_time = datetime.now(UTC).isoformat()
+        validation_time = datetime.now(UTC)
 
         return ModelPerformanceResult(
             mean_squared_error=mse,

@@ -1,7 +1,7 @@
 """Datetime utilities for RFC3339 formatting consistency."""
 
 from datetime import datetime, UTC
-from typing import Optional
+from typing import Union
 
 
 def to_rfc3339(dt: datetime) -> str:
@@ -61,4 +61,17 @@ def from_rfc3339(dt_str: str) -> datetime:
         >>> from_rfc3339('2025-11-10T15:30:45+00:00')
         datetime.datetime(2025, 11, 10, 15, 30, 45, tzinfo=datetime.timezone.utc)
     """
-    return datetime.fromisoformat(dt_str)
+    normalized = dt_str.replace('Z', '+00:00')
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def ensure_utc_datetime(value: Union[datetime, str]) -> datetime:
+    """Coerce input into a timezone-aware UTC datetime."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str):
+        return from_rfc3339(value)
+    raise TypeError(f"Unsupported type for datetime coercion: {type(value)!r}")

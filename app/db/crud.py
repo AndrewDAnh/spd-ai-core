@@ -12,6 +12,7 @@ from app.db.models import (
     ModelTrainingJob,
     ModelServingConfig,
 )
+from app.utils.datetime_utils import ensure_utc_datetime
 
 
 # Prediction CRUD operations
@@ -25,13 +26,16 @@ def create_prediction(
     remaining_useful_life: float,
     is_going_to_fail: bool,
     confidence: float
+    
 ) -> Prediction:
     """Create a new prediction record"""
+    prediction_time_dt = ensure_utc_datetime(prediction_time)
+
     db_prediction = Prediction(
         prediction_id=prediction_id,
         batch_id=batch_id,
         engine_id=engine_id,
-        prediction_time=prediction_time,
+        prediction_time=prediction_time_dt,
         remaining_useful_life=remaining_useful_life,
         is_going_to_fail=is_going_to_fail,
         confidence=confidence
@@ -107,7 +111,7 @@ def create_or_update_baseline(
     
     if db_baseline:
         db_baseline.baseline_data = baseline_json
-        db_baseline.updated_at = datetime.now(UTC).isoformat()
+        db_baseline.updated_at = datetime.now(UTC)
     else:
         db_baseline = ReferenceBaseline(
             engine_id=engine_id,
@@ -155,7 +159,7 @@ def create_model_performance(
         precision=json.dumps(precision_floats),
         recall=json.dumps(recall_floats),
         f1_score=f1_score,
-        validation_time=validation_time,
+        validation_time=ensure_utc_datetime(validation_time),
     )
     db.add(record)
     db.commit()

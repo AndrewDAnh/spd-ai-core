@@ -77,7 +77,7 @@ class ModelDriftDetector:
             }
             
             return {
-                'timestamp': datetime.now(UTC).isoformat(),
+                'timestamp': datetime.now(UTC),
                 'summary': summary,
                 'engines': engine_results
             }

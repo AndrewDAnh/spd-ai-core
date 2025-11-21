@@ -35,7 +35,7 @@ async def predict_batch(
     try:
         # Generate unique prediction ID
         prediction_id = f"pred_{uuid.uuid4().hex[:12]}"
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = datetime.now(UTC)
         
         predictions = []
         
