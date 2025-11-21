@@ -56,6 +56,18 @@ class ModelPerformanceService:
         self.settings = get_settings()
         self.model_service = model_service or ModelInferenceService()
 
+    def attach_model_service(self, model_service: ModelInferenceService) -> None:
+        """Share the inference singleton so evaluations honor active model selection."""
+        if model_service is None:
+            raise ValueError("ModelPerformanceService requires a valid ModelInferenceService instance")
+
+        self.model_service = model_service
+        logger.info(
+            "Model performance service attached to inference service (regression_dir=%s, classification_dir=%s)",
+            self.model_service.regression_run_dir,
+            self.model_service.classification_run_dir,
+        )
+
     def run_evaluation(self) -> ModelPerformanceResult:
         """Run inference on the test split and compute regression and classification metrics."""
         test_df = load_test_dataset(self._dataset_root)

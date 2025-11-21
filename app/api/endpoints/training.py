@@ -143,6 +143,7 @@ async def update_model_selection(
 
     # Reload inference singleton with new artifact paths
     from app.api.endpoints.inference import model_service  # Local import to avoid circular dependency
+    from app.services.model_performance import model_performance_service
 
     logger.info(
         "Reloading inference service with regression=%s classification=%s",
@@ -154,6 +155,7 @@ async def update_model_selection(
             regression_run_dir=regression_path,
             classification_run_dir=classification_path,
         )
+        model_performance_service.attach_model_service(model_service)
     except Exception as exc:  # pylint: disable=broad-except
         logger.exception("Failed to reload inference models")
         raise HTTPException(status_code=500, detail="Failed to reload inference models") from exc
